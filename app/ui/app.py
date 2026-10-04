@@ -20,25 +20,10 @@ st.set_page_config(
 # ============================================================
 # SESSION / MEMORY
 # ============================================================
-#
-# IMPORTANT:
-# This session_id remains the same across Streamlit reruns.
-#
-# Question 1 → session_id = ABC
-# Question 2 → session_id = ABC
-# Question 3 → session_id = ABC
-#
-# Your FastAPI backend passes this ID to ResearchAgent,
-# which uses it to load/save conversation memory.
-# ============================================================
 
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
 
-
-# ============================================================
-# OPTIONAL CONVERSATION HISTORY
-# ============================================================
 
 if "conversation_history" not in st.session_state:
     st.session_state.conversation_history = []
@@ -92,7 +77,7 @@ st.markdown(
 
 
     /* ======================================================
-       HERO LABEL
+       HERO
        ====================================================== */
 
     .eyebrow {
@@ -104,11 +89,6 @@ st.markdown(
         margin-bottom: 0.8rem;
     }
 
-
-    /* ======================================================
-       HERO TITLE
-       ====================================================== */
-
     .hero-title {
         font-size: 2.9rem;
         font-weight: 750;
@@ -117,11 +97,6 @@ st.markdown(
         margin-bottom: 0.7rem;
         color: #f7f7f7;
     }
-
-
-    /* ======================================================
-       HERO SUBTITLE
-       ====================================================== */
 
     .hero-subtitle {
         color: #9ca3af;
@@ -133,7 +108,7 @@ st.markdown(
 
 
     /* ======================================================
-       SECTION TITLE
+       SECTION
        ====================================================== */
 
     .section-title {
@@ -142,7 +117,6 @@ st.markdown(
         color: #f5f5f5;
         margin-bottom: 0.7rem;
     }
-
 
     .section-description {
         color: #9ca3af;
@@ -174,12 +148,24 @@ st.markdown(
 
 
     /* ======================================================
+       FILE UPLOADER
+       ====================================================== */
+
+    div[data-testid="stFileUploader"] {
+        background: #17191e;
+        border: 1px solid #30333a;
+        border-radius: 12px;
+        padding: 0.5rem;
+    }
+
+
+    /* ======================================================
        START RESEARCH BUTTON
        ====================================================== */
 
     div.stButton > button {
         width: 100%;
-        height: 48px;
+        min-height: 48px;
 
         background: #ff4f52;
         color: white;
@@ -221,7 +207,7 @@ st.markdown(
 
 
     /* ======================================================
-       RESULT CARD
+       ANSWER
        ====================================================== */
 
     .answer-card {
@@ -233,7 +219,6 @@ st.markdown(
         line-height: 1.7;
     }
 
-
     .result-title {
         font-size: 1.4rem;
         font-weight: 700;
@@ -242,14 +227,55 @@ st.markdown(
 
 
     /* ======================================================
+       DOCUMENT STATUS
+       ====================================================== */
+
+    .document-status {
+        background: #17191e;
+        border: 1px solid #30333a;
+        border-radius: 10px;
+        padding: 0.8rem 1rem;
+        margin-top: 0.5rem;
+        color: #c7cad1;
+        font-size: 0.85rem;
+    }
+
+
+    /* ======================================================
        MEMORY STATUS
        ====================================================== */
 
     .memory-status {
-        color: #737985;
-        font-size: 0.72rem;
+        color: #9ca3af;
+        font-size: 0.78rem;
         text-align: center;
         margin-top: 0.8rem;
+        margin-bottom: 0.5rem;
+    }
+
+
+    /* ======================================================
+       MEMORY DETAILS CARD
+       ====================================================== */
+
+    .memory-card {
+        background: #17191e;
+        border: 1px solid #30333a;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-top: 0.5rem;
+    }
+
+    .memory-label {
+        color: #8f96a3;
+        font-size: 0.78rem;
+        margin-bottom: 0.2rem;
+    }
+
+    .memory-value {
+        color: #eeeeee;
+        font-size: 0.9rem;
+        margin-bottom: 0.8rem;
     }
 
 
@@ -373,6 +399,61 @@ question = st.text_area(
 
 
 # ============================================================
+# DOCUMENT UPLOAD
+# ============================================================
+
+st.markdown(
+    """
+    <div class="section-title">
+        Document
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+st.markdown(
+    """
+    <div class="section-description">
+        Upload a PDF if you want the agent to answer using your
+        document. Leave it empty for web-based research.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+uploaded_file = st.file_uploader(
+    label="Upload PDF",
+    type=["pdf"],
+    accept_multiple_files=False,
+    label_visibility="collapsed",
+)
+
+
+# ============================================================
+# DOCUMENT STATUS
+# ============================================================
+
+if uploaded_file is not None:
+
+    file_size_mb = uploaded_file.size / (1024 * 1024)
+
+    st.markdown(
+        f"""
+        <div class="document-status">
+            📄 <b>{uploaded_file.name}</b>
+            &nbsp;•&nbsp;
+            {file_size_mb:.2f} MB
+            &nbsp;•&nbsp;
+            PDF ready for RAG
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
 # START RESEARCH
 # ============================================================
 
@@ -389,9 +470,9 @@ start_research = st.button(
 
 if start_research:
 
-    # --------------------------------------------------------
-    # VALIDATE INPUT
-    # --------------------------------------------------------
+    # ========================================================
+    # VALIDATE QUESTION
+    # ========================================================
 
     if not question.strip():
 
@@ -402,60 +483,82 @@ if start_research:
         st.stop()
 
 
-    # --------------------------------------------------------
-    # CURRENT SESSION ID
-    # --------------------------------------------------------
+    # ========================================================
+    # SESSION
+    # ========================================================
 
     session_id = st.session_state.session_id
 
 
-    # --------------------------------------------------------
-    # SHOW MEMORY STATUS
-    # --------------------------------------------------------
+    # ========================================================
+    # PREVIOUS CONVERSATION COUNT
+    # ========================================================
 
     previous_turns = len(
         st.session_state.conversation_history
     )
 
 
-    # --------------------------------------------------------
+    # ========================================================
+    # PREPARE REQUEST
+    # ========================================================
+
+    form_data = {
+        "question": question.strip(),
+        "session_id": session_id,
+    }
+
+    files = None
+
+
+    # ========================================================
+    # PDF PRESENT
+    # ========================================================
+
+    if uploaded_file is not None:
+
+        files = {
+            "document": (
+                uploaded_file.name,
+                uploaded_file.getvalue(),
+                "application/pdf",
+            )
+        }
+
+
+    # ========================================================
     # API REQUEST
-    # --------------------------------------------------------
+    # ========================================================
 
     with st.spinner(
-        "Research agent is planning, searching, evaluating, "
-        "and synthesizing..."
+        (
+            "Processing document, creating embeddings, "
+            "retrieving relevant content, reranking, "
+            "and generating answer..."
+            if uploaded_file is not None
+            else
+            "Research agent is planning, searching, "
+            "evaluating, and synthesizing..."
+        )
     ):
 
         try:
 
             response = requests.post(
                 f"{API_URL}/research",
-
-                json={
-                    "question": question.strip(),
-
-                    # IMPORTANT:
-                    # This is what connects multiple
-                    # questions to the same memory.
-                    "session_id": session_id,
-                },
-
-                timeout=300,
+                data=form_data,
+                files=files,
+                timeout=1000,
             )
 
-
-            # Raise error for HTTP 4xx / 5xx
-
             response.raise_for_status()
-
 
             data = response.json()
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # CONNECTION ERROR
-        # ----------------------------------------------------
+        # ====================================================
 
         except requests.exceptions.ConnectionError:
 
@@ -467,9 +570,9 @@ if start_research:
             st.stop()
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # TIMEOUT
-        # ----------------------------------------------------
+        # ====================================================
 
         except requests.exceptions.Timeout:
 
@@ -480,9 +583,9 @@ if start_research:
             st.stop()
 
 
-        # ----------------------------------------------------
-        # HTTP/API ERROR
-        # ----------------------------------------------------
+        # ====================================================
+        # HTTP ERROR
+        # ====================================================
 
         except requests.exceptions.HTTPError as e:
 
@@ -490,13 +593,12 @@ if start_research:
 
                 error_detail = response.json().get(
                     "detail",
-                    str(e)
+                    str(e),
                 )
 
             except Exception:
 
                 error_detail = str(e)
-
 
             st.error(
                 f"Research API error: {error_detail}"
@@ -505,9 +607,9 @@ if start_research:
             st.stop()
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # OTHER REQUEST ERROR
-        # ----------------------------------------------------
+        # ====================================================
 
         except requests.exceptions.RequestException as e:
 
@@ -518,9 +620,22 @@ if start_research:
             st.stop()
 
 
-        # ----------------------------------------------------
+        # ====================================================
+        # JSON ERROR
+        # ====================================================
+
+        except ValueError:
+
+            st.error(
+                "The backend returned an invalid response."
+            )
+
+            st.stop()
+
+
+        # ====================================================
         # GENERAL ERROR
-        # ----------------------------------------------------
+        # ====================================================
 
         except Exception as e:
 
@@ -532,15 +647,22 @@ if start_research:
 
 
     # ========================================================
-    # SAVE CONVERSATION LOCALLY FOR UI
+    # SAVE CONVERSATION
     # ========================================================
 
     st.session_state.conversation_history.append(
         {
             "question": question.strip(),
+
             "answer": data.get(
                 "final_answer",
-                ""
+                "",
+            ),
+
+            "document": (
+                uploaded_file.name
+                if uploaded_file is not None
+                else None
             ),
         }
     )
@@ -577,11 +699,258 @@ if start_research:
 
 
     # ========================================================
+    # METADATA
+    # ========================================================
+
+    metadata = data.get(
+        "metadata",
+        {},
+    )
+
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+
+    # ========================================================
+    # GENERAL METADATA
+    # ========================================================
+
+    mode = metadata.get(
+        "mode",
+        "web_research",
+    )
+
+    document_uploaded = metadata.get(
+        "document_uploaded",
+        uploaded_file is not None,
+    )
+
+    document_name = metadata.get(
+        "document_name",
+        (
+            uploaded_file.name
+            if uploaded_file is not None
+            else None
+        ),
+    )
+
+    retrieval_method = metadata.get(
+        "retrieval_method",
+    )
+
+    reranking_enabled = metadata.get(
+        "reranking_enabled",
+    )
+
+    retrieved_documents = metadata.get(
+        "retrieved_documents",
+    )
+
+    candidate_k = metadata.get(
+        "candidate_k",
+    )
+
+    top_k = metadata.get(
+        "top_k",
+    )
+
+    context_k = metadata.get(
+        "context_k",
+    )
+
+
+    # ========================================================
+    # MEMORY INFORMATION
+    # ========================================================
+
+    memory_loaded = metadata.get(
+        "memory_loaded"
+    )
+
+    memory_count = metadata.get(
+        "memory_count",
+        0,
+    )
+
+    memory_context = metadata.get(
+        "memory_context",
+        "",
+    )
+
+    intent = metadata.get(
+        "intent",
+        "",
+    )
+
+
+    # ========================================================
+    # MEMORY STATUS
+    # ========================================================
+
+    if memory_loaded is True:
+
+        st.success(
+            f"🧠 Conversation memory active • "
+            f"{memory_count} previous conversation(s) loaded."
+        )
+
+    elif memory_loaded is False:
+
+        st.info(
+            "🧠 Conversation memory active • "
+            "No previous conversation found."
+        )
+
+
+    # ========================================================
+    # MEMORY DETAILS
+    # ========================================================
+
+    if memory_loaded is not None:
+
+        with st.expander(
+            "🧠 Memory Details",
+            expanded=False,
+        ):
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                st.markdown(
+                    "**Memory Status**"
+                )
+
+                if memory_loaded:
+
+                    st.success(
+                        "Active"
+                    )
+
+                else:
+
+                    st.info(
+                        "No previous memory"
+                    )
+
+
+                st.markdown(
+                    "**Previous Conversations**"
+                )
+
+                st.write(
+                    memory_count
+                )
+
+
+            with col2:
+
+                st.markdown(
+                    "**Session ID**"
+                )
+
+                st.code(
+                    session_id,
+                    language=None,
+                )
+
+
+                if intent:
+
+                    st.markdown(
+                        "**Detected Intent**"
+                    )
+
+                    st.write(
+                        intent
+                    )
+
+
+            # ------------------------------------------------
+            # Memory context preview
+            # ------------------------------------------------
+
+            if memory_context:
+
+                st.markdown(
+                    "---"
+                )
+
+                st.markdown(
+                    "**Memory Context Used**"
+                )
+
+                st.text(
+                    memory_context
+                )
+
+            else:
+
+                st.markdown(
+                    "---"
+                )
+
+                st.caption(
+                    "No previous conversation context was available."
+                )
+
+
+    # ========================================================
+    # DOCUMENT RAG STATUS
+    # ========================================================
+
+    if document_uploaded:
+
+        retrieval_text = (
+            retrieval_method
+            if retrieval_method
+            else "N/A"
+        )
+
+        if reranking_enabled is True:
+
+            reranking_text = "Enabled"
+
+        elif reranking_enabled is False:
+
+            reranking_text = "Disabled"
+
+        else:
+
+            reranking_text = "N/A"
+
+
+        retrieved_text = (
+            str(retrieved_documents)
+            if retrieved_documents is not None
+            else "N/A"
+        )
+
+
+        st.markdown(
+            f"""
+            <div class="document-status">
+                📄 <b>Document RAG Active</b>
+                &nbsp;•&nbsp;
+                {document_name or "Uploaded PDF"}
+                &nbsp;•&nbsp;
+                Retrieval: {retrieval_text}
+                &nbsp;•&nbsp;
+                Retrieved: {retrieved_text}
+                &nbsp;•&nbsp;
+                Reranking: {reranking_text}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+    # ========================================================
     # FINAL ANSWER
     # ========================================================
 
     final_answer = data.get(
-        "final_answer"
+        "final_answer",
     )
 
 
@@ -604,10 +973,15 @@ if start_research:
             unsafe_allow_html=True,
         )
 
-        # Use normal Streamlit markdown here so
-        # Markdown formatting in the LLM response works.
 
-        st.markdown(final_answer)
+        # ----------------------------------------------------
+        # Render LLM Markdown normally
+        # ----------------------------------------------------
+
+        st.markdown(
+            final_answer
+        )
+
 
         st.markdown(
             """
@@ -616,55 +990,96 @@ if start_research:
             unsafe_allow_html=True,
         )
 
+    else:
 
-    # ========================================================
-    # MEMORY DEBUG INFORMATION
-    # ========================================================
-    #
-    # Your ResearchAgent puts memory information into
-    # state.metadata.
-    #
-    # This section is useful while developing.
-    # ========================================================
-
-    metadata = data.get(
-        "metadata",
-        {}
-    )
-
-
-    memory_loaded = metadata.get(
-        "memory_loaded"
-    )
-
-    memory_count = metadata.get(
-        "memory_count"
-    )
-
-
-    if memory_loaded is True:
-
-        st.markdown(
-            f"""
-            <div class="memory-status">
-                🧠 Memory active •
-                {memory_count or 0} previous conversation(s) loaded
-            </div>
-            """,
-            unsafe_allow_html=True,
+        st.warning(
+            "The research agent did not return a final answer."
         )
 
-    elif memory_loaded is False:
 
-        st.markdown(
-            """
-            <div class="memory-status">
-                🧠 Memory active •
-                No previous conversation found
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    # ========================================================
+    # DOCUMENT RAG DETAILS
+    # ========================================================
+
+    if document_uploaded:
+
+        with st.expander(
+            "📄 Document RAG Details",
+            expanded=False,
+        ):
+
+            col1, col2 = st.columns(2)
+
+
+            with col1:
+
+                st.metric(
+                    "Retrieval Method",
+                    retrieval_method or "N/A",
+                )
+
+                st.metric(
+                    "Candidate K",
+                    (
+                        candidate_k
+                        if candidate_k is not None
+                        else "N/A"
+                    ),
+                )
+
+                st.metric(
+                    "Top K",
+                    (
+                        top_k
+                        if top_k is not None
+                        else "N/A"
+                    ),
+                )
+
+
+            with col2:
+
+                st.metric(
+                    "Reranking",
+                    (
+                        "Enabled"
+                        if reranking_enabled is True
+                        else "Disabled"
+                        if reranking_enabled is False
+                        else "N/A"
+                    ),
+                )
+
+                st.metric(
+                    "Retrieved Documents",
+                    (
+                        retrieved_documents
+                        if retrieved_documents is not None
+                        else "N/A"
+                    ),
+                )
+
+                st.metric(
+                    "Context K",
+                    (
+                        context_k
+                        if context_k is not None
+                        else "N/A"
+                    ),
+                )
+
+
+            st.markdown(
+                f"**Document:** "
+                f"{document_name or 'N/A'}"
+            )
+
+
+            st.markdown(
+                "**Pipeline:** "
+                "Load → Chunk → Embed → Retrieve → "
+                "Rerank → Generate"
+            )
 
 
     # ========================================================
@@ -673,7 +1088,7 @@ if start_research:
 
     plan = data.get(
         "plan",
-        []
+        [],
     )
 
 
@@ -686,7 +1101,7 @@ if start_research:
 
             for index, step in enumerate(
                 plan,
-                start=1
+                start=1,
             ):
 
                 st.markdown(
@@ -700,7 +1115,7 @@ if start_research:
 
     ranked_sources = data.get(
         "ranked_sources",
-        []
+        [],
     )
 
 
@@ -715,42 +1130,42 @@ if start_research:
 
                 rank = source.get(
                     "rank",
-                    "-"
+                    "-",
                 )
 
                 title = source.get(
                     "title",
-                    "Untitled source"
+                    "Untitled source",
                 )
 
                 url = source.get(
                     "url",
-                    ""
+                    "",
                 )
 
                 score = source.get(
                     "score",
-                    "N/A"
+                    "N/A",
                 )
 
                 authority = source.get(
                     "authority",
-                    "UNKNOWN"
+                    "UNKNOWN",
                 )
 
                 relevance = source.get(
                     "relevance",
-                    "UNKNOWN"
+                    "UNKNOWN",
                 )
 
                 usefulness = source.get(
                     "usefulness",
-                    "UNKNOWN"
+                    "UNKNOWN",
                 )
 
                 reason = source.get(
                     "reason",
-                    ""
+                    "",
                 )
 
 
@@ -766,7 +1181,7 @@ if start_research:
 
                     st.metric(
                         "Score",
-                        score
+                        score,
                     )
 
 
@@ -774,7 +1189,7 @@ if start_research:
 
                     st.metric(
                         "Authority",
-                        authority
+                        authority,
                     )
 
 
@@ -782,7 +1197,7 @@ if start_research:
 
                     st.metric(
                         "Relevance",
-                        relevance
+                        relevance,
                     )
 
 
@@ -790,7 +1205,7 @@ if start_research:
 
                     st.metric(
                         "Usefulness",
-                        usefulness
+                        usefulness,
                     )
 
 
@@ -816,7 +1231,7 @@ if start_research:
     # ========================================================
 
     analysis = data.get(
-        "analysis"
+        "analysis",
     )
 
 
@@ -838,7 +1253,7 @@ if start_research:
 
     search_results = data.get(
         "search_results",
-        []
+        [],
     )
 
 
@@ -851,7 +1266,7 @@ if start_research:
 
             for index, result in enumerate(
                 search_results,
-                start=1
+                start=1,
             ):
 
                 st.markdown(
@@ -861,17 +1276,17 @@ if start_research:
 
                 if result.get(
                     "success",
-                    True
+                    True,
                 ):
 
                     query_text = result.get(
                         "query",
-                        ""
+                        "",
                     )
 
                     answer_text = result.get(
                         "answer",
-                        ""
+                        "",
                     )
 
 
@@ -899,7 +1314,7 @@ if start_research:
 
                     citations = result.get(
                         "citations",
-                        []
+                        [],
                     )
 
 
@@ -914,12 +1329,12 @@ if start_research:
 
                             title = citation.get(
                                 "title",
-                                "Source"
+                                "Source",
                             )
 
                             url = citation.get(
                                 "url",
-                                ""
+                                "",
                             )
 
 
@@ -935,25 +1350,18 @@ if start_research:
                                     f"- {title}"
                                 )
 
-
                 else:
 
                     st.error(
                         result.get(
                             "error",
-                            "Search failed"
+                            "Search failed",
                         )
                     )
 
 
 # ============================================================
 # NEW CONVERSATION
-# ============================================================
-#
-# This creates a completely new memory session.
-#
-# Existing conversation remains stored in the backend,
-# but the new session will not use it.
 # ============================================================
 
 st.markdown(
@@ -971,19 +1379,25 @@ new_conversation = st.button(
 
 if new_conversation:
 
-    # Generate completely new memory ID
+    # --------------------------------------------------------
+    # Generate a new memory session
+    # --------------------------------------------------------
 
     st.session_state.session_id = str(
         uuid.uuid4()
     )
 
 
+    # --------------------------------------------------------
     # Clear UI conversation history
+    # --------------------------------------------------------
 
     st.session_state.conversation_history = []
 
 
-    # Clear previous question/result state
+    # --------------------------------------------------------
+    # Restart Streamlit
+    # --------------------------------------------------------
 
     st.rerun()
 

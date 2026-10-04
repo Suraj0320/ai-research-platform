@@ -11,6 +11,9 @@ from app.tools.web_search import WebSearchTool
 
 from app.memory.memory_manager import MemoryManager
 
+from app.agents.intent_router import IntentRouter
+from app.agents.memory_agent import MemoryAgent
+
 
 class ResearchAgent:
 
@@ -43,10 +46,12 @@ class ResearchAgent:
         self.answer_generator = ResearchAnswerGenerator()
 
         # --------------------------------------------------------
-        # Memory
+        # Memory components
         # --------------------------------------------------------
 
         self.memory_manager = MemoryManager()
+
+        self.memory_agent = MemoryAgent()
 
     # ============================================================
     # MAIN RESEARCH PIPELINE
@@ -77,34 +82,53 @@ class ResearchAgent:
 
             memory_context = ""
 
+            # ----------------------------------------------------
+            # Initialize memory defaults
+            # ----------------------------------------------------
+
+            state.memory = []
+
+            state.metadata["memory_context"] = ""
+
+            state.metadata["memory_loaded"] = False
+
+            state.metadata["memory_count"] = 0
+
+            # ----------------------------------------------------
+            # Load memory only when session exists
+            # ----------------------------------------------------
+
             if session_id:
 
+                print(
+                    f"[MEMORY] Loading memory for session: "
+                    f"{session_id}"
+                )
+
                 # ------------------------------------------------
-                # Load previous conversation
+                # Load previous conversations
                 # ------------------------------------------------
 
                 state.memory = (
                     self.memory_manager.load_memory(
                         session_id=session_id
                     )
+                    or []
                 )
 
                 # ------------------------------------------------
-                # Format memory for downstream agents
+                # Format memory for agents
                 # ------------------------------------------------
 
                 memory_context = (
                     self.memory_manager.format_memory(
                         state.memory
                     )
+                    or ""
                 )
 
                 # ------------------------------------------------
-                # Store memory context in state metadata
-                #
-                # Planner reads:
-                #
-                # state.metadata["memory_context"]
+                # Store memory information in state
                 # ------------------------------------------------
 
                 state.metadata["memory_context"] = (
@@ -119,22 +143,8 @@ class ResearchAgent:
                     len(state.memory)
                 )
 
-            else:
-
-                # ------------------------------------------------
-                # No session -> no memory
-                # ------------------------------------------------
-
-                state.memory = []
-
-                state.metadata["memory_context"] = ""
-
-                state.metadata["memory_loaded"] = False
-
-                state.metadata["memory_count"] = 0
-
             # ----------------------------------------------------
-            # Debug
+            # Debug information
             # ----------------------------------------------------
 
             print(
@@ -152,10 +162,125 @@ class ResearchAgent:
             )
 
             # ====================================================
-            # 2. PLANNING
+            # 2. INTENT ROUTING
+            # ====================================================
+
+            state.status = "routing_intent"
+
+            is_memory_query = (
+                IntentRouter.is_memory_query(
+                    question
+                )
+            )
+
+            state.metadata["memory_query"] = (
+                is_memory_query
+            )
+
+            # ----------------------------------------------------
+            # Memory query
+            # ----------------------------------------------------
+            #
+            # Examples:
+            #
+            # "What was my previous question?"
+            # "What did I ask you before?"
+            # "What did we discuss earlier?"
+            #
+            # These questions should NOT go through:
+            #
+            # Planner -> Search -> Evaluator -> Ranker -> Analyzer
+            #
+            # They should be answered directly from memory.
+            # ----------------------------------------------------
+
+            if is_memory_query:
+
+                state.status = "answering_from_memory"
+
+                state.metadata["intent"] = "memory"
+
+                print(
+                    "[ROUTER] Memory-related question detected."
+                )
+
+                print(
+                    "[MEMORY] Answering directly from conversation memory."
+                )
+
+                # ------------------------------------------------
+                # If there is no memory
+                # ------------------------------------------------
+
+                if not memory_context:
+
+                    state.final_answer = (
+                        "I don't have any previous "
+                        "conversation available in this session."
+                    )
+
+                else:
+
+                    # --------------------------------------------
+                    # Ask MemoryAgent
+                    # --------------------------------------------
+
+                    state.final_answer = (
+                        self.memory_agent.answer(
+                            question=question,
+                            memory_context=memory_context,
+                        )
+                    )
+
+                # ------------------------------------------------
+                # Metadata
+                # ------------------------------------------------
+
+                state.metadata["answer_available"] = (
+                    bool(state.final_answer)
+                )
+
+                state.metadata["pipeline_completed"] = True
+
+                state.metadata["pipeline_type"] = (
+                    "memory_query"
+                )
+
+                # ------------------------------------------------
+                # Completed
+                # ------------------------------------------------
+
+                state.status = "completed"
+
+                print(
+                    "[MEMORY] Memory answer generated successfully."
+                )
+
+                return state
+
+            # ====================================================
+            # NORMAL RESEARCH QUERY
+            # ====================================================
+
+            state.metadata["intent"] = "research"
+
+            state.metadata["pipeline_type"] = (
+                "research_query"
+            )
+
+            print(
+                "[ROUTER] Research question detected."
+            )
+
+            # ====================================================
+            # 3. PLANNING
             # ====================================================
 
             state.status = "planning"
+
+            print(
+                "[PLANNER] Creating research plan..."
+            )
 
             state.plan = (
                 self.planner.create_plan(
@@ -183,10 +308,14 @@ class ResearchAgent:
             )
 
             # ====================================================
-            # 3. SEARCHING
+            # 4. SEARCHING
             # ====================================================
 
             state.status = "searching"
+
+            print(
+                "[SEARCH] Starting web research..."
+            )
 
             state.search_results = (
                 self.search(state)
@@ -201,16 +330,31 @@ class ResearchAgent:
                 f"{len(state.search_results)} search steps."
             )
 
+            # ----------------------------------------------------
+            # Check whether search returned anything
+            # ----------------------------------------------------
+
+            if not state.search_results:
+
+                print(
+                    "[SEARCH] No search results were returned."
+                )
+
             # ====================================================
-            # 4. SOURCE EVALUATION
+            # 5. SOURCE EVALUATION
             # ====================================================
 
             state.status = "evaluating_sources"
+
+            print(
+                "[EVALUATOR] Evaluating sources..."
+            )
 
             state.evaluated_sources = (
                 self.source_evaluator.evaluate(
                     state.search_results
                 )
+                or []
             )
 
             state.metadata["evaluated_source_count"] = (
@@ -223,15 +367,20 @@ class ResearchAgent:
             )
 
             # ====================================================
-            # 5. SOURCE RANKING
+            # 6. SOURCE RANKING
             # ====================================================
 
             state.status = "ranking_sources"
+
+            print(
+                "[RANKER] Ranking sources..."
+            )
 
             state.ranked_sources = (
                 self.source_ranker.rank(
                     state.evaluated_sources
                 )
+                or []
             )
 
             state.metadata["ranked_source_count"] = (
@@ -244,10 +393,14 @@ class ResearchAgent:
             )
 
             # ====================================================
-            # 6. ANALYSIS
+            # 7. ANALYSIS
             # ====================================================
 
             state.status = "analyzing"
+
+            print(
+                "[ANALYZER] Analyzing research evidence..."
+            )
 
             state.analysis = (
                 self.analyzer.analyze(
@@ -265,10 +418,14 @@ class ResearchAgent:
             )
 
             # ====================================================
-            # 7. FINAL ANSWER
+            # 8. FINAL ANSWER
             # ====================================================
 
             state.status = "generating"
+
+            print(
+                "[ANSWER] Generating final answer..."
+            )
 
             state.final_answer = (
                 self.answer_generator.generate(
@@ -286,13 +443,17 @@ class ResearchAgent:
             )
 
             # ====================================================
-            # 8. SAVE MEMORY
+            # 9. SAVE MEMORY
             # ====================================================
 
             if (
                 session_id
                 and state.final_answer
             ):
+
+                print(
+                    "[MEMORY] Saving conversation..."
+                )
 
                 self.memory_manager.save_memory(
                     session_id=session_id,
@@ -305,7 +466,7 @@ class ResearchAgent:
                 )
 
             # ====================================================
-            # 9. COMPLETED
+            # 10. COMPLETED
             # ====================================================
 
             state.status = "completed"
@@ -333,7 +494,7 @@ class ResearchAgent:
             )
 
             print(
-                f"[RESEARCH] Pipeline failed: "
+                "[RESEARCH] Pipeline failed: "
                 f"{repr(e)}"
             )
 
@@ -442,8 +603,9 @@ Prefer authoritative and recent sources when appropriate.
                     f"{repr(e)}"
                 )
 
+                # ------------------------------------------------
                 # Continue with remaining objectives
-                # instead of killing the entire research pipeline.
+                # ------------------------------------------------
 
                 continue
 

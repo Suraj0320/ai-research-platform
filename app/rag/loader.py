@@ -1,21 +1,23 @@
 from pathlib import Path
 
+from pypdf import PdfReader
+
 
 SUPPORTED_EXTENSIONS = {
     ".txt",
     ".md",
+    ".pdf",
 }
 
 
 def load_document(file_path: str) -> str:
     """
-    Load a supported text-based document.
+    Load a supported document.
 
-    Args:
-        file_path: Path to the document.
-
-    Returns:
-        Document contents as a string.
+    Supported:
+    - .txt
+    - .md
+    - .pdf
     """
 
     path = Path(file_path)
@@ -30,10 +32,42 @@ def load_document(file_path: str) -> str:
             f"Path is not a file: {file_path}"
         )
 
-    if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+    extension = path.suffix.lower()
+
+    if extension not in SUPPORTED_EXTENSIONS:
         raise ValueError(
-            f"Unsupported file type: {path.suffix}. "
+            f"Unsupported file type: {extension}. "
             f"Supported types: {SUPPORTED_EXTENSIONS}"
         )
 
-    return path.read_text(encoding="utf-8")
+    # --------------------------------------------------
+    # TXT / MARKDOWN
+    # --------------------------------------------------
+
+    if extension in {".txt", ".md"}:
+        return path.read_text(
+            encoding="utf-8"
+        )
+
+    # --------------------------------------------------
+    # PDF
+    # --------------------------------------------------
+
+    if extension == ".pdf":
+
+        reader = PdfReader(
+            str(path)
+        )
+
+        pages = []
+
+        for page in reader.pages:
+
+            text = page.extract_text()
+
+            if text:
+                pages.append(text)
+
+        return "\n\n".join(pages).strip()
+
+    return ""
