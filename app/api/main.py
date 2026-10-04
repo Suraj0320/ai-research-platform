@@ -5,7 +5,6 @@ import os
 
 from app.llm.gateway.gateway import LLMGateway
 from app.agents.research_agent import ResearchAgent
-from app.rag.pipeline import RAGPipeline
 
 from app.api.schemas import (
     GenerateRequest,
@@ -32,16 +31,18 @@ app = FastAPI(
 # LAZY-LOADED SERVICES
 # ============================================================
 #
-# IMPORTANT:
-# These services are NOT initialized when the application
-# starts.
+# Heavy RAG dependencies such as:
 #
-# This prevents heavy ML/RAG dependencies such as
-# SentenceTransformers/PyTorch from loading before FastAPI
-# starts listening on Render's assigned $PORT.
+#   sentence-transformers
+#   PyTorch
+#   FAISS
 #
-# Services are created only when their endpoint is actually
-# used.
+# are intentionally NOT loaded when FastAPI starts.
+#
+# RAGPipeline is imported only when a PDF is uploaded.
+#
+# This helps the Render deployment start within the
+# available memory.
 # ============================================================
 
 gateway = None
@@ -49,12 +50,16 @@ research_agent = None
 rag_pipeline = None
 
 
+# ============================================================
+# LLM GATEWAY
+# ============================================================
+
 def get_gateway():
     """
-    Lazily initialize the LLM gateway.
+    Lazily initialize the LLM Gateway.
 
-    The gateway is created only when /generate or another
-    LLM-dependent operation actually needs it.
+    The gateway is created only when an LLM request
+    actually needs it.
     """
 
     global gateway
@@ -73,6 +78,10 @@ def get_gateway():
 
     return gateway
 
+
+# ============================================================
+# RESEARCH AGENT
+# ============================================================
 
 def get_research_agent():
     """
@@ -96,12 +105,22 @@ def get_research_agent():
     return research_agent
 
 
+# ============================================================
+# RAG PIPELINE
+# ============================================================
+
 def get_rag_pipeline():
     """
     Lazily initialize the RAG Pipeline.
 
-    This is particularly important because the RAG pipeline
-    may load SentenceTransformer/PyTorch models.
+    IMPORTANT:
+    RAGPipeline is imported INSIDE this function.
+
+    This prevents sentence-transformers / PyTorch from
+    being imported during FastAPI startup.
+
+    The RAG pipeline is loaded only when the user uploads
+    a PDF.
     """
 
     global rag_pipeline
@@ -111,6 +130,10 @@ def get_rag_pipeline():
         print(
             "[INFO] Initializing RAG Pipeline..."
         )
+
+        # IMPORTANT:
+        # Do NOT move this import to the top of the file.
+        from app.rag.pipeline import RAGPipeline
 
         rag_pipeline = RAGPipeline()
 
@@ -241,7 +264,6 @@ async def research(
                 detail="Research question cannot be empty.",
             )
 
-
         # ====================================================
         # MODE 1 — DOCUMENT / RAG
         # ====================================================
@@ -291,9 +313,7 @@ async def research(
                     pdf_bytes
                 )
 
-                document_path = (
-                    temp_file.name
-                )
+                document_path = temp_file.name
 
             document_name = filename
 
@@ -420,7 +440,6 @@ async def research(
                 metadata=metadata,
             )
 
-
         # ====================================================
         # MODE 2 — WEB RESEARCH
         # ====================================================
@@ -474,25 +493,16 @@ async def research(
         # ====================================================
 
         metadata = dict(
-
             state.metadata
-
             if state.metadata
-
             else {}
         )
 
-        metadata[
-            "mode"
-        ] = "web_research"
+        metadata["mode"] = "web_research"
 
-        metadata[
-            "document_uploaded"
-        ] = False
+        metadata["document_uploaded"] = False
 
-        metadata[
-            "document_name"
-        ] = None
+        metadata["document_name"] = None
 
         # ====================================================
         # WEB RESEARCH RESPONSE
@@ -529,7 +539,6 @@ async def research(
             metadata=metadata,
         )
 
-
     # ========================================================
     # HTTP ERROR
     # ========================================================
@@ -537,7 +546,6 @@ async def research(
     except HTTPException:
 
         raise
-
 
     # ========================================================
     # GENERAL ERROR
@@ -563,7 +571,6 @@ async def research(
             ),
         )
 
-
     # ========================================================
     # CLEAN TEMPORARY PDF
     # ========================================================
@@ -571,13 +578,8 @@ async def research(
     finally:
 
         if (
-
             document_path
-
-            and os.path.exists(
-                document_path
-            )
-
+            and os.path.exists(document_path)
         ):
 
             try:
