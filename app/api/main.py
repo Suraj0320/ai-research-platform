@@ -29,24 +29,96 @@ app = FastAPI(
 
 
 # ============================================================
-# SERVICES
+# LAZY-LOADED SERVICES
+# ============================================================
+#
+# IMPORTANT:
+# These services are NOT initialized when the application
+# starts.
+#
+# This prevents heavy ML/RAG dependencies such as
+# SentenceTransformers/PyTorch from loading before FastAPI
+# starts listening on Render's assigned $PORT.
+#
+# Services are created only when their endpoint is actually
+# used.
 # ============================================================
 
-gateway = LLMGateway()
-
-research_agent = ResearchAgent()
-
-# IMPORTANT:
-# Do NOT initialize RAGPipeline during application startup.
-#
-# RAGPipeline loads the embedding model through
-# SentenceTransformer, which can take time and memory.
-#
-# Render needs Uvicorn to bind to $PORT quickly.
-#
-# Therefore, RAGPipeline will be initialized only when
-# the user actually uploads a PDF.
+gateway = None
+research_agent = None
 rag_pipeline = None
+
+
+def get_gateway():
+    """
+    Lazily initialize the LLM gateway.
+
+    The gateway is created only when /generate or another
+    LLM-dependent operation actually needs it.
+    """
+
+    global gateway
+
+    if gateway is None:
+
+        print(
+            "[INFO] Initializing LLM Gateway..."
+        )
+
+        gateway = LLMGateway()
+
+        print(
+            "[INFO] LLM Gateway initialized."
+        )
+
+    return gateway
+
+
+def get_research_agent():
+    """
+    Lazily initialize the Research Agent.
+    """
+
+    global research_agent
+
+    if research_agent is None:
+
+        print(
+            "[INFO] Initializing Research Agent..."
+        )
+
+        research_agent = ResearchAgent()
+
+        print(
+            "[INFO] Research Agent initialized."
+        )
+
+    return research_agent
+
+
+def get_rag_pipeline():
+    """
+    Lazily initialize the RAG Pipeline.
+
+    This is particularly important because the RAG pipeline
+    may load SentenceTransformer/PyTorch models.
+    """
+
+    global rag_pipeline
+
+    if rag_pipeline is None:
+
+        print(
+            "[INFO] Initializing RAG Pipeline..."
+        )
+
+        rag_pipeline = RAGPipeline()
+
+        print(
+            "[INFO] RAG Pipeline initialized."
+        )
+
+    return rag_pipeline
 
 
 # ============================================================
@@ -81,6 +153,10 @@ def generate(
 
     try:
 
+        # ----------------------------------------------------
+        # Validate prompt
+        # ----------------------------------------------------
+
         prompt = request.prompt.strip()
 
         if not prompt:
@@ -90,7 +166,17 @@ def generate(
                 detail="Prompt cannot be empty.",
             )
 
-        response = gateway.generate(
+        # ----------------------------------------------------
+        # Lazy-load LLM Gateway
+        # ----------------------------------------------------
+
+        llm_gateway = get_gateway()
+
+        # ----------------------------------------------------
+        # Generate response
+        # ----------------------------------------------------
+
+        response = llm_gateway.generate(
             prompt
         )
 
@@ -137,8 +223,6 @@ async def research(
     ),
 ):
 
-    global rag_pipeline
-
     document_path = None
     document_name = None
 
@@ -168,7 +252,6 @@ async def research(
                 "[INFO] Document research mode selected."
             )
 
-
             # ------------------------------------------------
             # Validate PDF
             # ------------------------------------------------
@@ -182,7 +265,6 @@ async def research(
                     detail="Only PDF files are supported.",
                 )
 
-
             # ------------------------------------------------
             # Read uploaded PDF
             # ------------------------------------------------
@@ -195,7 +277,6 @@ async def research(
                     status_code=400,
                     detail="Uploaded PDF is empty.",
                 )
-
 
             # ------------------------------------------------
             # Save temporary PDF
@@ -214,9 +295,7 @@ async def research(
                     temp_file.name
                 )
 
-
             document_name = filename
-
 
             print(
                 f"[INFO] PDF uploaded: "
@@ -228,38 +307,17 @@ async def research(
                 f"{document_path}"
             )
 
-
             # =================================================
-            # LAZY INITIALIZATION OF RAG PIPELINE
+            # LAZY-LOAD RAG PIPELINE
             # =================================================
 
-            # RAGPipeline loads the SentenceTransformer
-            # embedding model.
-            #
-            # We intentionally initialize it only when
-            # a PDF is actually uploaded.
-            #
-            # This allows Render to start Uvicorn and bind
-            # to $PORT before the embedding model is loaded.
-
-            if rag_pipeline is None:
-
-                print(
-                    "[INFO] Initializing RAG pipeline..."
-                )
-
-                rag_pipeline = RAGPipeline()
-
-                print(
-                    "[INFO] RAG pipeline initialized."
-                )
-
+            pipeline = get_rag_pipeline()
 
             # =================================================
             # RUN RAG PIPELINE
             # =================================================
 
-            rag_result = rag_pipeline.generate(
+            rag_result = pipeline.generate(
 
                 question=question,
 
@@ -275,7 +333,6 @@ async def research(
 
                 rerank=True,
             )
-
 
             # =================================================
             # RAG RESPONSE
@@ -321,7 +378,6 @@ async def research(
                     )
                 ),
             }
-
 
             return ResearchResponse(
 
@@ -373,14 +429,22 @@ async def research(
             "[INFO] Web research mode selected."
         )
 
+        # ----------------------------------------------------
+        # Lazy-load Research Agent
+        # ----------------------------------------------------
 
-        state = research_agent.run(
+        agent = get_research_agent()
+
+        # ----------------------------------------------------
+        # Run Research Agent
+        # ----------------------------------------------------
+
+        state = agent.run(
 
             question=question,
 
             session_id=session_id,
         )
-
 
         # ====================================================
         # HANDLE FAILURE
@@ -405,7 +469,6 @@ async def research(
                 detail=error_message,
             )
 
-
         # ====================================================
         # METADATA
         # ====================================================
@@ -419,21 +482,17 @@ async def research(
             else {}
         )
 
-
         metadata[
             "mode"
         ] = "web_research"
-
 
         metadata[
             "document_uploaded"
         ] = False
 
-
         metadata[
             "document_name"
         ] = None
-
 
         # ====================================================
         # WEB RESEARCH RESPONSE
