@@ -11,7 +11,7 @@ load_dotenv()
 
 LLM_PROVIDER = os.getenv(
     "LLM_PROVIDER",
-    "mock",
+    "ollama",
 )
 
 GEMINI_API_KEY = os.getenv(
@@ -48,9 +48,11 @@ if LLM_PROVIDER == "ollama":
         )
 
 
-if LLM_PROVIDER != "mock":
+# Tavily is required for web research
+# regardless of which LLM is being used.
 
-    if not TAVILY_API_KEY:
-        raise RuntimeError(
-            "TAVILY_API_KEY is not set."
-        )
+if not TAVILY_API_KEY:
+
+    raise RuntimeError(
+        "TAVILY_API_KEY is not set."
+    )

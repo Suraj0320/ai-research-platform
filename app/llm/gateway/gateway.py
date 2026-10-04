@@ -1,4 +1,7 @@
-from app.config.settings import LLM_PROVIDER
+from app.config.settings import (
+    LLM_PROVIDER,
+    OLLAMA_MODEL,
+)
 
 from app.llm.gemini import GeminiService
 from app.llm.ollama import OllamaLLM
@@ -20,7 +23,9 @@ class LLMGateway:
 
         elif LLM_PROVIDER == "ollama":
 
-            self.llm = OllamaLLM()
+            self.llm = OllamaLLM(
+                model=OLLAMA_MODEL
+            )
 
         else:
 
@@ -28,9 +33,9 @@ class LLMGateway:
                 f"Unsupported LLM provider: {LLM_PROVIDER}"
             )
 
-    def generate(self, prompt: str) -> str:
-        """
-        Generate a response using the configured LLM.
-        """
+    def generate(
+        self,
+        prompt: str,
+    ) -> str:
 
         return self.llm.generate(prompt)
