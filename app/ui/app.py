@@ -11,8 +11,9 @@ import os
 
 API_URL = os.getenv(
     "API_URL",
-    "http://127.0.0.1:8000",
-)
+    "https://ai-research-platform-api-47dw.onrender.com",
+).rstrip("/")
+
 
 st.set_page_config(
     page_title="AI Research & Analysis Platform",
