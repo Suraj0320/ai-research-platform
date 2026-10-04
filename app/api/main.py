@@ -36,7 +36,17 @@ gateway = LLMGateway()
 
 research_agent = ResearchAgent()
 
-rag_pipeline = RAGPipeline()
+# IMPORTANT:
+# Do NOT initialize RAGPipeline during application startup.
+#
+# RAGPipeline loads the embedding model through
+# SentenceTransformer, which can take time and memory.
+#
+# Render needs Uvicorn to bind to $PORT quickly.
+#
+# Therefore, RAGPipeline will be initialized only when
+# the user actually uploads a PDF.
+rag_pipeline = None
 
 
 # ============================================================
@@ -127,6 +137,8 @@ async def research(
     ),
 ):
 
+    global rag_pipeline
+
     document_path = None
     document_name = None
 
@@ -215,6 +227,32 @@ async def research(
                 f"[INFO] Temporary path: "
                 f"{document_path}"
             )
+
+
+            # =================================================
+            # LAZY INITIALIZATION OF RAG PIPELINE
+            # =================================================
+
+            # RAGPipeline loads the SentenceTransformer
+            # embedding model.
+            #
+            # We intentionally initialize it only when
+            # a PDF is actually uploaded.
+            #
+            # This allows Render to start Uvicorn and bind
+            # to $PORT before the embedding model is loaded.
+
+            if rag_pipeline is None:
+
+                print(
+                    "[INFO] Initializing RAG pipeline..."
+                )
+
+                rag_pipeline = RAGPipeline()
+
+                print(
+                    "[INFO] RAG pipeline initialized."
+                )
 
 
             # =================================================
