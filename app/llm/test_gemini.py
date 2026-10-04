@@ -5,7 +5,7 @@ def main():
     llm = GeminiService()
 
     response = llm.generate(
-        "Explain what an AI agent is in exactly three sentences."
+        "Explain what an AI agent is in 3 sentences."
     )
 
     print("\nGemini response:\n")

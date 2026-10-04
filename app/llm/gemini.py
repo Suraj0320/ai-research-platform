@@ -5,15 +5,17 @@ from app.config.settings import GEMINI_API_KEY
 
 class GeminiService:
 
-    def __init__(self, model: str = "gemini-3.8-flash"):
-        self.model = model
-        self.client = genai.Client(api_key=GEMINI_API_KEY)
+    def __init__(self):
 
-    def generate(self, prompt: str) -> str:
-
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
+        self.client = genai.Client(
+            api_key=GEMINI_API_KEY
         )
 
-        return response.text
+    def generate(self, prompt: str):
+
+        interaction = self.client.interactions.create(
+            model="gemini-3.8-flash",
+            input=prompt,
+        )
+
+        return interaction.output_text
