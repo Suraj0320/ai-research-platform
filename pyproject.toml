@@ -1,11 +1,11 @@
 [project]
 name = "ai-research-platform"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI Research & Analysis Platform"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
+
 dependencies = [
-    "faiss-cpu>=1.15.1",
     "fastapi>=0.141.1",
     "google-genai>=2.25.0",
     "langgraph>=1.2.12",
@@ -15,7 +15,6 @@ dependencies = [
     "python-dotenv>=1.2.3",
     "rank-bm25>=0.2.2",
     "requests>=2.34.2",
-    "sentence-transformers>=6.1.0",
     "streamlit>=1.64.0",
     "tavily-python>=0.8.4",
     "uvicorn>=0.54.0",
